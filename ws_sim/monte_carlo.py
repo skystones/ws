@@ -38,9 +38,11 @@ class DeckConfig:
 
 class DeckState:
     def __init__(self, config: DeckConfig, rng: random.Random) -> None:
+        self.config = config
         self.rng = rng
         self.waiting_room: MutableSequence[bool] = self._build_waiting_room(config)
         self.deck: MutableSequence[bool] = self._build_shuffled_deck(config)
+        self._validate_state()
 
     def _build_waiting_room(self, config: DeckConfig) -> MutableSequence[bool]:
         return [True] * config.initial_waiting_room_climax_cards + [
@@ -54,6 +56,12 @@ class DeckState:
         self.rng.shuffle(deck)
         return deck
 
+    def _validate_state(self) -> None:
+        total_cards = len(self.deck) + len(self.waiting_room)
+        total_climax_cards = sum(self.deck) + sum(self.waiting_room)
+        if total_cards != self.config.total_cards or total_climax_cards != self.config.climax_cards:
+            raise ValueError("Deck and waiting room composition does not match configuration")
+
     def draw(self) -> Tuple[bool, bool]:
         refresh_damage = False
         if not self.deck:
@@ -62,6 +70,7 @@ class DeckState:
             self.waiting_room = []
             self.rng.shuffle(self.deck)
             refresh_damage = True
+            self._validate_state()
 
         card = self.deck.pop()
         self.waiting_room.append(card)
