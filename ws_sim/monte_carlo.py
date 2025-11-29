@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Iterable, List, Mapping, MutableSequence, Sequence, Tuple
+from typing import Callable, Iterable, List, Mapping, MutableSequence, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -67,14 +67,14 @@ class DeckState:
             deck_size, deck_climax_cards
         )
         self._validate_state()
-        deck_size = config.total_cards - config.waiting_room_cards
-        deck_climax_cards = config.climax_cards - config.waiting_room_climax_cards
-        self.deck: MutableSequence[bool] = self._build_shuffled_pile(
-            deck_size, deck_climax_cards
-        )
-        self.waiting_room: MutableSequence[bool] = self._build_shuffled_pile(
-            config.waiting_room_cards, config.waiting_room_climax_cards
-        )
+
+        if config.waiting_room_cards or config.waiting_room_climax_cards:
+            deck_size = config.total_cards - config.waiting_room_cards
+            deck_climax_cards = config.climax_cards - config.waiting_room_climax_cards
+            self.deck = self._build_shuffled_pile(deck_size, deck_climax_cards)
+            self.waiting_room = self._build_shuffled_pile(
+                config.waiting_room_cards, config.waiting_room_climax_cards
+            )
 
     def _build_shuffled_pile(self, size: int, climax_cards: int) -> MutableSequence[bool]:
         pile = [True] * climax_cards + [False] * (size - climax_cards)
@@ -102,15 +102,32 @@ class DeckState:
         return card, refresh_damage
 
 
-def _simulate_attack(damage: int, deck_state: DeckState) -> Tuple[int, bool]:
+def _resolve_damage_event(damage: int, deck_state: DeckState) -> Tuple[int, int, bool]:
+    """Resolve cancellable damage against the current ``deck_state``.
+
+    Returns a tuple of ``(damage_dealt, refresh_penalty, cancelled)`` where
+    ``refresh_penalty`` counts how many refresh penalty points were incurred while
+    resolving the damage event and ``cancelled`` indicates whether any point of
+    damage revealed a climax and cancelled the attack.
+    """
+
     cancelled = False
-    refresh_damage = False
+    refresh_penalty = 0
     for _ in range(damage):
         card, refreshed = deck_state.draw()
-        refresh_damage = refresh_damage or refreshed
+        if refreshed:
+            refresh_penalty += 1
         if card:
             cancelled = True
-    return (0 if cancelled else damage), refresh_damage
+    return (0 if cancelled else damage), refresh_penalty, cancelled
+
+
+def _simulate_attack(damage: int, deck_state: DeckState) -> Tuple[int, int]:
+    dealt, refresh_penalty, _ = _resolve_damage_event(damage, deck_state)
+    return dealt, refresh_penalty
+
+
+MainPhaseStep = Callable[[DeckState], int]
 
 
 def simulate_trials(
@@ -118,13 +135,51 @@ def simulate_trials(
     deck_config: DeckConfig,
     trials: int,
     seed: int | None = None,
+    main_phase_steps: Iterable[MainPhaseStep] | None = None,
 ) -> List[int]:
+    """Run Monte Carlo trials for a battle damage sequence.
+
+    ``main_phase_steps`` injects optional pre-battle deck manipulation and damage
+    hooks. Each step receives the mutable :class:`DeckState` and **must** return
+    the immediate damage it dealt (including any refresh penalty it generated)
+    before battle attacks resolve. Steps are responsible for calling
+    :func:`_resolve_damage_event` (or helpers built on it) when cancellable
+    damage is needed.
+
+    Example:
+        >>> simulate_trials(
+        ...     damage_sequence=[3, 3, 2],
+        ...     deck_config=DeckConfig(total_cards=50, climax_cards=8),
+        ...     trials=1000,
+        ...     main_phase_steps=[main_phase_four_damage_with_bonus],
+        ... )
+    """
+
+    if trials <= 0:
+        raise ValueError("trials must be positive")
+
+    for damage in damage_sequence:
+        if damage < 0:
+            raise ValueError("damage_sequence values must be non-negative")
+
+    steps: Tuple[MainPhaseStep, ...] = tuple(main_phase_steps or ())
+    for step in steps:
+        if not callable(step):
+            raise ValueError("All main_phase_steps must be callable")
+
     rng = random.Random(seed)
     results: List[int] = []
 
     for _ in range(trials):
         deck_state = DeckState(deck_config, rng)
         total_damage = 0
+        for step in steps:
+            step_damage = step(deck_state)
+            if not isinstance(step_damage, int):
+                raise TypeError("main_phase_steps must return an integer damage amount")
+            if step_damage < 0:
+                raise ValueError("main_phase_steps cannot return negative damage")
+            total_damage += step_damage
         for damage in damage_sequence:
             dealt, refreshed = _simulate_attack(damage, deck_state)
             if refreshed:
@@ -133,6 +188,39 @@ def simulate_trials(
         results.append(total_damage)
 
     return results
+
+
+def main_phase_four_damage_with_bonus(deck_state: DeckState) -> int:
+    """Deal 4 cancellable damage and, on cancel, deal another cancellable 4.
+
+    The helper returns the total damage dealt (including refresh penalties) so
+    it can be used directly inside ``main_phase_steps``.
+    """
+
+    dealt, refresh_penalty, cancelled = _resolve_damage_event(4, deck_state)
+    total = dealt + refresh_penalty
+    if cancelled:
+        followup_dealt, followup_refresh, _ = _resolve_damage_event(4, deck_state)
+        total += followup_dealt + followup_refresh
+    return total
+
+
+def reveal_nine_clock_climaxes(deck_state: DeckState) -> int:
+    """Reveal the top 9 cards and clock (uncancellable) for each climax.
+
+    The reveal respects refresh timing via :meth:`DeckState.draw`, so refresh
+    penalties are added to the returned damage before battle damage resolves.
+    """
+
+    climax_count = 0
+    refresh_penalty = 0
+    for _ in range(9):
+        card, refreshed = deck_state.draw()
+        if refreshed:
+            refresh_penalty += 1
+        if card:
+            climax_count += 1
+    return climax_count + refresh_penalty
 
 
 def cumulative_probability_at_least(damages: Sequence[int], thresholds: Iterable[int]) -> Mapping[int, float]:
