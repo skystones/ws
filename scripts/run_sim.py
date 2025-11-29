@@ -18,6 +18,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("damages", nargs="+", type=int, help="Damage values for each attack (e.g. 2 3 3)")
     parser.add_argument("--total-cards", type=int, default=50, help="Total number of cards in deck")
     parser.add_argument("--climax-cards", type=int, default=8, help="Number of climax cards in deck")
+    parser.add_argument(
+        "--waiting-room-cards",
+        type=int,
+        default=0,
+        help=(
+            "Number of cards that start in the waiting room. These cards are removed from"
+            " the initial deck to model a partially milled deck or a post-refresh state."
+        ),
+    )
+    parser.add_argument(
+        "--waiting-room-climax-cards",
+        type=int,
+        default=0,
+        help=(
+            "Number of climax cards already in the waiting room at the start of the"
+            " simulation, useful for representing decks immediately after a refresh."
+        ),
+    )
     parser.add_argument("--trials", type=int, default=5000, help="Number of Monte Carlo trials")
     parser.add_argument(
         "--auto-tune",
@@ -39,7 +57,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    config = DeckConfig(total_cards=args.total_cards, climax_cards=args.climax_cards)
+    config = DeckConfig(
+        total_cards=args.total_cards,
+        climax_cards=args.climax_cards,
+        waiting_room_cards=args.waiting_room_cards,
+        waiting_room_climax_cards=args.waiting_room_climax_cards,
+    )
 
     trials = args.trials
     history = None

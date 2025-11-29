@@ -9,6 +9,8 @@ from typing import Iterable, List, Mapping, MutableSequence, Sequence, Tuple
 class DeckConfig:
     total_cards: int
     climax_cards: int
+    waiting_room_cards: int = 0
+    waiting_room_climax_cards: int = 0
 
     def __post_init__(self) -> None:
         if self.climax_cards > self.total_cards:
@@ -17,18 +19,39 @@ class DeckConfig:
             raise ValueError("total_cards must be positive")
         if self.climax_cards < 0:
             raise ValueError("climax_cards cannot be negative")
+        if self.waiting_room_cards < 0:
+            raise ValueError("waiting_room_cards cannot be negative")
+        if self.waiting_room_climax_cards < 0:
+            raise ValueError("waiting_room_climax_cards cannot be negative")
+        if self.waiting_room_cards > self.total_cards:
+            raise ValueError("waiting_room_cards cannot exceed total_cards")
+        if self.waiting_room_climax_cards > self.climax_cards:
+            raise ValueError("waiting_room_climax_cards cannot exceed climax_cards")
+
+        deck_size = self.total_cards - self.waiting_room_cards
+        deck_climax_cards = self.climax_cards - self.waiting_room_climax_cards
+        if deck_climax_cards > deck_size:
+            raise ValueError("climax_cards in deck cannot exceed remaining deck size")
+        if self.waiting_room_climax_cards > self.waiting_room_cards:
+            raise ValueError("waiting_room_climax_cards cannot exceed waiting_room_cards")
 
 
 class DeckState:
     def __init__(self, config: DeckConfig, rng: random.Random) -> None:
         self.rng = rng
-        self.deck: MutableSequence[bool] = self._build_shuffled_deck(config)
-        self.waiting_room: MutableSequence[bool] = []
+        deck_size = config.total_cards - config.waiting_room_cards
+        deck_climax_cards = config.climax_cards - config.waiting_room_climax_cards
+        self.deck: MutableSequence[bool] = self._build_shuffled_pile(
+            deck_size, deck_climax_cards
+        )
+        self.waiting_room: MutableSequence[bool] = self._build_shuffled_pile(
+            config.waiting_room_cards, config.waiting_room_climax_cards
+        )
 
-    def _build_shuffled_deck(self, config: DeckConfig) -> MutableSequence[bool]:
-        deck = [True] * config.climax_cards + [False] * (config.total_cards - config.climax_cards)
-        self.rng.shuffle(deck)
-        return deck
+    def _build_shuffled_pile(self, size: int, climax_cards: int) -> MutableSequence[bool]:
+        pile = [True] * climax_cards + [False] * (size - climax_cards)
+        self.rng.shuffle(pile)
+        return pile
 
     def draw(self) -> Tuple[bool, bool]:
         refresh_damage = False
