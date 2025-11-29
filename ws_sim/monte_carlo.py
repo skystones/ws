@@ -40,21 +40,21 @@ class DeckState:
     def __init__(self, config: DeckConfig, rng: random.Random) -> None:
         self.config = config
         self.rng = rng
-        self.waiting_room: MutableSequence[bool] = self._build_waiting_room(config)
-        self.deck: MutableSequence[bool] = self._build_shuffled_deck(config)
+        deck_size = config.total_cards - config.initial_waiting_room_cards
+        deck_climax_cards = config.climax_cards - config.initial_waiting_room_climax_cards
+
+        self.waiting_room: MutableSequence[bool] = self._build_shuffled_pile(
+            config.initial_waiting_room_cards, config.initial_waiting_room_climax_cards
+        )
+        self.deck: MutableSequence[bool] = self._build_shuffled_pile(
+            deck_size, deck_climax_cards
+        )
         self._validate_state()
 
-    def _build_waiting_room(self, config: DeckConfig) -> MutableSequence[bool]:
-        return [True] * config.initial_waiting_room_climax_cards + [
-            False
-        ] * (config.initial_waiting_room_cards - config.initial_waiting_room_climax_cards)
-
-    def _build_shuffled_deck(self, config: DeckConfig) -> MutableSequence[bool]:
-        remaining_climax_cards = config.climax_cards - config.initial_waiting_room_climax_cards
-        remaining_cards = config.total_cards - config.initial_waiting_room_cards
-        deck = [True] * remaining_climax_cards + [False] * (remaining_cards - remaining_climax_cards)
-        self.rng.shuffle(deck)
-        return deck
+    def _build_shuffled_pile(self, size: int, climax_cards: int) -> MutableSequence[bool]:
+        pile = [True] * climax_cards + [False] * (size - climax_cards)
+        self.rng.shuffle(pile)
+        return pile
 
     def _validate_state(self) -> None:
         total_cards = len(self.deck) + len(self.waiting_room)
