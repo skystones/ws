@@ -1,11 +1,74 @@
 import math
+import random
+
+import pytest
 
 from ws_sim.monte_carlo import (
     DeckConfig,
+    DeckState,
     cumulative_probability_at_least,
     simulate_trials,
     tune_trial_count,
 )
+
+
+def test_initial_waiting_room_configuration():
+    rng = random.Random(0)
+    config = DeckConfig(
+        total_cards=10,
+        climax_cards=3,
+        initial_waiting_room_cards=4,
+        initial_waiting_room_climax_cards=1,
+    )
+
+    state = DeckState(config, rng)
+
+    assert len(state.waiting_room) == 4
+    assert sum(state.waiting_room) == 1
+    assert len(state.deck) == 6
+    assert sum(state.deck) == 2
+
+
+def test_refresh_preserves_composition_with_initial_waiting_room():
+    rng = random.Random(1)
+    config = DeckConfig(
+        total_cards=10,
+        climax_cards=3,
+        initial_waiting_room_cards=4,
+        initial_waiting_room_climax_cards=1,
+    )
+
+    state = DeckState(config, rng)
+    initial_deck_size = len(state.deck)
+    for _ in range(initial_deck_size):
+        state.draw()
+
+    assert len(state.deck) == 0
+    climax_count_before_refresh = sum(state.waiting_room)
+
+    _, refreshed = state.draw()
+
+    assert refreshed is True
+    assert len(state.deck) + len(state.waiting_room) == config.total_cards
+    assert sum(state.deck) + sum(state.waiting_room) == climax_count_before_refresh == config.climax_cards
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"total_cards": 5, "climax_cards": 2, "initial_waiting_room_cards": 6},
+        {"total_cards": 5, "climax_cards": 2, "initial_waiting_room_climax_cards": 3},
+        {
+            "total_cards": 5,
+            "climax_cards": 4,
+            "initial_waiting_room_cards": 2,
+            "initial_waiting_room_climax_cards": 0,
+        },
+    ],
+)
+def test_invalid_initial_waiting_room_configuration(kwargs):
+    with pytest.raises(ValueError):
+        DeckConfig(**kwargs)
 
 
 def test_reproducible_trials():

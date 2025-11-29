@@ -9,6 +9,8 @@ from typing import Iterable, List, Mapping, MutableSequence, Sequence, Tuple
 class DeckConfig:
     total_cards: int
     climax_cards: int
+    initial_waiting_room_cards: int = 0
+    initial_waiting_room_climax_cards: int = 0
     waiting_room_cards: int = 0
     waiting_room_climax_cards: int = 0
 
@@ -19,6 +21,21 @@ class DeckConfig:
             raise ValueError("total_cards must be positive")
         if self.climax_cards < 0:
             raise ValueError("climax_cards cannot be negative")
+        if self.initial_waiting_room_cards < 0:
+            raise ValueError("initial_waiting_room_cards cannot be negative")
+        if self.initial_waiting_room_climax_cards < 0:
+            raise ValueError("initial_waiting_room_climax_cards cannot be negative")
+        if self.initial_waiting_room_cards > self.total_cards:
+            raise ValueError("initial_waiting_room_cards cannot exceed total_cards")
+        if self.initial_waiting_room_climax_cards > self.initial_waiting_room_cards:
+            raise ValueError("initial_waiting_room_climax_cards cannot exceed initial_waiting_room_cards")
+        if self.initial_waiting_room_climax_cards > self.climax_cards:
+            raise ValueError("initial_waiting_room_climax_cards cannot exceed climax_cards")
+
+        remaining_cards = self.total_cards - self.initial_waiting_room_cards
+        remaining_climax_cards = self.climax_cards - self.initial_waiting_room_climax_cards
+        if remaining_climax_cards > remaining_cards:
+            raise ValueError("Remaining climax cards cannot exceed remaining deck size")
         if self.waiting_room_cards < 0:
             raise ValueError("waiting_room_cards cannot be negative")
         if self.waiting_room_climax_cards < 0:
@@ -38,7 +55,18 @@ class DeckConfig:
 
 class DeckState:
     def __init__(self, config: DeckConfig, rng: random.Random) -> None:
+        self.config = config
         self.rng = rng
+        deck_size = config.total_cards - config.initial_waiting_room_cards
+        deck_climax_cards = config.climax_cards - config.initial_waiting_room_climax_cards
+
+        self.waiting_room: MutableSequence[bool] = self._build_shuffled_pile(
+            config.initial_waiting_room_cards, config.initial_waiting_room_climax_cards
+        )
+        self.deck: MutableSequence[bool] = self._build_shuffled_pile(
+            deck_size, deck_climax_cards
+        )
+        self._validate_state()
         deck_size = config.total_cards - config.waiting_room_cards
         deck_climax_cards = config.climax_cards - config.waiting_room_climax_cards
         self.deck: MutableSequence[bool] = self._build_shuffled_pile(
@@ -53,6 +81,12 @@ class DeckState:
         self.rng.shuffle(pile)
         return pile
 
+    def _validate_state(self) -> None:
+        total_cards = len(self.deck) + len(self.waiting_room)
+        total_climax_cards = sum(self.deck) + sum(self.waiting_room)
+        if total_cards != self.config.total_cards or total_climax_cards != self.config.climax_cards:
+            raise ValueError("Deck and waiting room composition does not match configuration")
+
     def draw(self) -> Tuple[bool, bool]:
         refresh_damage = False
         if not self.deck:
@@ -61,6 +95,7 @@ class DeckState:
             self.waiting_room = []
             self.rng.shuffle(self.deck)
             refresh_damage = True
+            self._validate_state()
 
         card = self.deck.pop()
         self.waiting_room.append(card)
