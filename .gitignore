@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+artifacts/
+!artifacts/.gitkeep
+.DS_Store
+.ipynb_checkpoints/
