@@ -7,6 +7,8 @@ from ws_sim.monte_carlo import (
     DeckConfig,
     DeckState,
     cumulative_probability_at_least,
+    main_phase_four_damage_with_bonus,
+    reveal_nine_clock_climaxes,
     simulate_trials,
     tune_trial_count,
 )
@@ -111,3 +113,50 @@ def test_trial_tuning_converges():
     # Final two estimates should be within the target error margin
     assert len(history) >= 2
     assert math.isclose(history[-1], history[-2], rel_tol=0, abs_tol=0.02)
+
+
+def test_main_phase_four_damage_with_bonus_uses_cancellation():
+    rng = random.Random(0)
+    config = DeckConfig(total_cards=8, climax_cards=1)
+    state = DeckState(config, rng)
+    state.deck = [False, False, False, False, True, False, False, False]
+    state.waiting_room = []
+
+    damage = main_phase_four_damage_with_bonus(state)
+
+    assert damage == 4
+    assert len(state.deck) == 0
+    assert sum(state.waiting_room) == 1
+
+
+def test_reveal_nine_clock_climaxes_counts_climax_damage():
+    rng = random.Random(1)
+    config = DeckConfig(total_cards=12, climax_cards=3)
+    state = DeckState(config, rng)
+    state.deck = [True, False, False, False, False, False, False, True, False, False, False, True]
+    state.waiting_room = []
+
+    damage = reveal_nine_clock_climaxes(state)
+
+    assert damage == 2
+    assert len(state.deck) == 3
+    assert sum(state.waiting_room) == 2
+
+
+def test_simulate_trials_runs_main_phase_steps_first():
+    config = DeckConfig(total_cards=8, climax_cards=1)
+    seed = 42
+
+    damages = simulate_trials(
+        damage_sequence=[0],
+        deck_config=config,
+        trials=1,
+        seed=seed,
+        main_phase_steps=[main_phase_four_damage_with_bonus],
+    )
+
+    rng = random.Random(seed)
+    expected_state = DeckState(config, rng)
+    expected_main_phase_damage = main_phase_four_damage_with_bonus(expected_state)
+
+    assert damages == [expected_main_phase_damage]
