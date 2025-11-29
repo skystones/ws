@@ -9,6 +9,8 @@ from typing import Iterable, List, Mapping, MutableSequence, Sequence, Tuple
 class DeckConfig:
     total_cards: int
     climax_cards: int
+    initial_waiting_room_cards: int = 0
+    initial_waiting_room_climax_cards: int = 0
 
     def __post_init__(self) -> None:
         if self.climax_cards > self.total_cards:
@@ -17,16 +19,38 @@ class DeckConfig:
             raise ValueError("total_cards must be positive")
         if self.climax_cards < 0:
             raise ValueError("climax_cards cannot be negative")
+        if self.initial_waiting_room_cards < 0:
+            raise ValueError("initial_waiting_room_cards cannot be negative")
+        if self.initial_waiting_room_climax_cards < 0:
+            raise ValueError("initial_waiting_room_climax_cards cannot be negative")
+        if self.initial_waiting_room_cards > self.total_cards:
+            raise ValueError("initial_waiting_room_cards cannot exceed total_cards")
+        if self.initial_waiting_room_climax_cards > self.initial_waiting_room_cards:
+            raise ValueError("initial_waiting_room_climax_cards cannot exceed initial_waiting_room_cards")
+        if self.initial_waiting_room_climax_cards > self.climax_cards:
+            raise ValueError("initial_waiting_room_climax_cards cannot exceed climax_cards")
+
+        remaining_cards = self.total_cards - self.initial_waiting_room_cards
+        remaining_climax_cards = self.climax_cards - self.initial_waiting_room_climax_cards
+        if remaining_climax_cards > remaining_cards:
+            raise ValueError("Remaining climax cards cannot exceed remaining deck size")
 
 
 class DeckState:
     def __init__(self, config: DeckConfig, rng: random.Random) -> None:
         self.rng = rng
+        self.waiting_room: MutableSequence[bool] = self._build_waiting_room(config)
         self.deck: MutableSequence[bool] = self._build_shuffled_deck(config)
-        self.waiting_room: MutableSequence[bool] = []
+
+    def _build_waiting_room(self, config: DeckConfig) -> MutableSequence[bool]:
+        return [True] * config.initial_waiting_room_climax_cards + [
+            False
+        ] * (config.initial_waiting_room_cards - config.initial_waiting_room_climax_cards)
 
     def _build_shuffled_deck(self, config: DeckConfig) -> MutableSequence[bool]:
-        deck = [True] * config.climax_cards + [False] * (config.total_cards - config.climax_cards)
+        remaining_climax_cards = config.climax_cards - config.initial_waiting_room_climax_cards
+        remaining_cards = config.total_cards - config.initial_waiting_room_cards
+        deck = [True] * remaining_climax_cards + [False] * (remaining_cards - remaining_climax_cards)
         self.rng.shuffle(deck)
         return deck
 
