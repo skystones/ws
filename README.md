@@ -20,8 +20,11 @@ pip install -r requirements.txt
 ```bash
 python scripts/run_sim.py 2 3 3 \
   --total-cards 50 --climax-cards 8 --trials 2000 \
+  --waiting-room-cards 10 --waiting-room-climax-cards 2 \
   --threshold 6 --auto-tune --target-error 0.02 --png artifacts/hist.png
 ```
+
+Use `--waiting-room-cards` and `--waiting-room-climax-cards` to represent games in progress—for example, to model a post-refresh state with 10 cards (including 2 climaxes) already in the waiting room.
 
 ### Use in a notebook
 See `notebooks/damage_simulation.ipynb` for an end-to-end example that tunes trials, runs the simulation, renders the histogram inline, and saves it to `artifacts/damage_hist.png`.
