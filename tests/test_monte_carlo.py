@@ -81,6 +81,18 @@ def test_reproducible_trials():
     assert first == second
 
 
+def test_attack_trigger_applies_bonus_damage():
+    config = DeckConfig(
+        total_cards=10,
+        climax_cards=0,
+        attacking_deck_size=1,
+        attacking_soul_trigger_cards=1,
+    )
+    damages = simulate_trials([1], config, trials=3, seed=7)
+
+    assert damages == [2, 2, 2]
+
+
 def test_cumulative_probability_is_monotonic():
     damage_sequence = [2, 2, 2]
     config = DeckConfig(total_cards=40, climax_cards=8)
@@ -113,6 +125,18 @@ def test_trial_tuning_converges():
     # Final two estimates should be within the target error margin
     assert len(history) >= 2
     assert math.isclose(history[-1], history[-2], rel_tol=0, abs_tol=0.02)
+
+
+def test_attacking_deck_validation():
+    with pytest.raises(ValueError):
+        DeckConfig(total_cards=10, climax_cards=2, attacking_soul_trigger_cards=1)
+    with pytest.raises(ValueError):
+        DeckConfig(
+            total_cards=10,
+            climax_cards=2,
+            attacking_deck_size=5,
+            attacking_soul_trigger_cards=6,
+        )
 
 
 def test_main_phase_four_damage_with_bonus_uses_cancellation():
