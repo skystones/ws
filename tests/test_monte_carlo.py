@@ -4,6 +4,7 @@ import random
 import pytest
 
 from ws_sim.monte_carlo import (
+    DamageEvent,
     DeckConfig,
     DeckState,
     cumulative_probability_at_least,
@@ -78,6 +79,43 @@ def test_reproducible_trials():
     config = DeckConfig(total_cards=50, climax_cards=8)
     first = simulate_trials(damage_sequence, config, trials=500, seed=123)
     second = simulate_trials(damage_sequence, config, trials=500, seed=123)
+    assert first == second
+
+
+def test_mixed_damage_events_apply_triggers_only_to_attacks():
+    config = DeckConfig(
+        total_cards=10,
+        climax_cards=0,
+        attacking_deck_size=2,
+        attacking_soul_trigger_cards=2,
+    )
+    damage_sequence = [
+        DamageEvent(base_damage=1, is_attack=True),
+        DamageEvent(base_damage=2, is_attack=False),
+        DamageEvent(base_damage=1, is_attack=True),
+    ]
+
+    damages = simulate_trials(damage_sequence, config, trials=1, seed=5)
+
+    assert damages == [6]
+
+
+def test_mixed_damage_trials_are_reproducible():
+    config = DeckConfig(
+        total_cards=40,
+        climax_cards=8,
+        attacking_deck_size=3,
+        attacking_soul_trigger_cards=1,
+    )
+    damage_sequence = [
+        DamageEvent(base_damage=2, is_attack=True),
+        DamageEvent(base_damage=1, is_attack=False),
+        DamageEvent(base_damage=3, is_attack=True),
+    ]
+
+    first = simulate_trials(damage_sequence, config, trials=500, seed=2024)
+    second = simulate_trials(damage_sequence, config, trials=500, seed=2024)
+
     assert first == second
 
 
