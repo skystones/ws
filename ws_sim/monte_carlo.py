@@ -13,6 +13,8 @@ class DeckConfig:
     initial_waiting_room_climax_cards: int = 0
     waiting_room_cards: int = 0
     waiting_room_climax_cards: int = 0
+    attacking_deck_size: int | None = None
+    attacking_soul_trigger_cards: int = 0
 
     def __post_init__(self) -> None:
         if self.climax_cards > self.total_cards:
@@ -51,6 +53,16 @@ class DeckConfig:
             raise ValueError("climax_cards in deck cannot exceed remaining deck size")
         if self.waiting_room_climax_cards > self.waiting_room_cards:
             raise ValueError("waiting_room_climax_cards cannot exceed waiting_room_cards")
+
+        if self.attacking_deck_size is None and self.attacking_soul_trigger_cards:
+            raise ValueError("attacking_soul_trigger_cards requires attacking_deck_size")
+        if self.attacking_deck_size is not None:
+            if self.attacking_deck_size <= 0:
+                raise ValueError("attacking_deck_size must be positive")
+            if self.attacking_soul_trigger_cards < 0:
+                raise ValueError("attacking_soul_trigger_cards cannot be negative")
+            if self.attacking_soul_trigger_cards > self.attacking_deck_size:
+                raise ValueError("attacking_soul_trigger_cards cannot exceed attacking_deck_size")
 
 
 class DeckState:
@@ -102,6 +114,35 @@ class DeckState:
         return card, refresh_damage
 
 
+class AttackingDeckState:
+    def __init__(self, deck_size: int, soul_trigger_cards: int, rng: random.Random) -> None:
+        self.deck_size = deck_size
+        self.soul_trigger_cards = soul_trigger_cards
+        self.rng = rng
+
+    def resolve_soul_trigger(self) -> bool:
+        if self.deck_size == 0:
+            return False
+
+        trigger_hit = self.rng.randrange(self.deck_size) < self.soul_trigger_cards
+        self.deck_size -= 1
+        if trigger_hit:
+            self.soul_trigger_cards -= 1
+        return trigger_hit
+
+
+def _build_attacking_deck(
+    deck_config: DeckConfig, rng: random.Random
+) -> AttackingDeckState | None:
+    if deck_config.attacking_deck_size is None:
+        return None
+    return AttackingDeckState(
+        deck_size=deck_config.attacking_deck_size,
+        soul_trigger_cards=deck_config.attacking_soul_trigger_cards,
+        rng=rng,
+    )
+
+
 def _resolve_damage_event(damage: int, deck_state: DeckState) -> Tuple[int, int, bool]:
     """Resolve cancellable damage against the current ``deck_state``.
 
@@ -122,8 +163,17 @@ def _resolve_damage_event(damage: int, deck_state: DeckState) -> Tuple[int, int,
     return (0 if cancelled else damage), refresh_penalty, cancelled
 
 
-def _simulate_attack(damage: int, deck_state: DeckState) -> Tuple[int, int]:
-    dealt, refresh_penalty, _ = _resolve_damage_event(damage, deck_state)
+def _resolve_attack_trigger(attacking_state: AttackingDeckState | None) -> bool:
+    if attacking_state is None:
+        return False
+    return attacking_state.resolve_soul_trigger()
+
+
+def _simulate_attack(
+    damage: int, deck_state: DeckState, attacking_state: AttackingDeckState | None
+) -> Tuple[int, int]:
+    damage_after_trigger = damage + 1 if _resolve_attack_trigger(attacking_state) else damage
+    dealt, refresh_penalty, _ = _resolve_damage_event(damage_after_trigger, deck_state)
     return dealt, refresh_penalty
 
 
@@ -195,6 +245,7 @@ def simulate_trials(
 
     for _ in range(trials):
         deck_state = DeckState(deck_config, rng)
+        attacking_state = _build_attacking_deck(deck_config, rng)
         total_damage = 0
         for step in steps:
             step_damage = step(deck_state)
@@ -205,7 +256,9 @@ def simulate_trials(
             total_damage += step_damage
         for event in normalized_damage_sequence:
             if event.is_attack:
-                dealt, refresh_penalty = _simulate_attack(event.base_damage, deck_state)
+                dealt, refresh_penalty = _simulate_attack(
+                    event.base_damage, deck_state, attacking_state
+                )
                 total_damage += dealt + refresh_penalty
             else:
                 dealt, refresh_penalty, _ = _resolve_damage_event(event.base_damage, deck_state)
