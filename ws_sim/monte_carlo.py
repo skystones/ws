@@ -127,17 +127,40 @@ def _simulate_attack(damage: int, deck_state: DeckState) -> Tuple[int, int]:
     return dealt, refresh_penalty
 
 
+@dataclass(frozen=True)
+class DamageEvent:
+    base_damage: int
+    is_attack: bool = True
+
+    def __post_init__(self) -> None:
+        if self.base_damage < 0:
+            raise ValueError("base_damage must be non-negative")
+
+
+def _normalize_damage_event(raw_damage: int | DamageEvent) -> DamageEvent:
+    if isinstance(raw_damage, DamageEvent):
+        return raw_damage
+    if isinstance(raw_damage, int):
+        return DamageEvent(base_damage=raw_damage, is_attack=True)
+    raise TypeError("damage_sequence must contain integers or DamageEvent instances")
+
+
 MainPhaseStep = Callable[[DeckState], int]
 
 
 def simulate_trials(
-    damage_sequence: Sequence[int],
+    damage_sequence: Sequence[int | DamageEvent],
     deck_config: DeckConfig,
     trials: int,
     seed: int | None = None,
     main_phase_steps: Iterable[MainPhaseStep] | None = None,
 ) -> List[int]:
     """Run Monte Carlo trials for a battle damage sequence.
+
+    ``damage_sequence`` accepts either integers (for backwards compatibility)
+    or :class:`DamageEvent` instances. Attack damage routes through
+    :func:`_simulate_attack`, while effect damage bypasses attack-only trigger
+    logic but still accounts for refresh penalties when resolving damage.
 
     ``main_phase_steps`` injects optional pre-battle deck manipulation and damage
     hooks. Each step receives the mutable :class:`DeckState` and **must** return
@@ -158,9 +181,9 @@ def simulate_trials(
     if trials <= 0:
         raise ValueError("trials must be positive")
 
-    for damage in damage_sequence:
-        if damage < 0:
-            raise ValueError("damage_sequence values must be non-negative")
+    normalized_damage_sequence: Tuple[DamageEvent, ...] = tuple(
+        _normalize_damage_event(damage) for damage in damage_sequence
+    )
 
     steps: Tuple[MainPhaseStep, ...] = tuple(main_phase_steps or ())
     for step in steps:
@@ -180,11 +203,13 @@ def simulate_trials(
             if step_damage < 0:
                 raise ValueError("main_phase_steps cannot return negative damage")
             total_damage += step_damage
-        for damage in damage_sequence:
-            dealt, refreshed = _simulate_attack(damage, deck_state)
-            if refreshed:
-                total_damage += 1  # refresh penalty damage
-            total_damage += dealt
+        for event in normalized_damage_sequence:
+            if event.is_attack:
+                dealt, refresh_penalty = _simulate_attack(event.base_damage, deck_state)
+                total_damage += dealt + refresh_penalty
+            else:
+                dealt, refresh_penalty, _ = _resolve_damage_event(event.base_damage, deck_state)
+                total_damage += dealt + refresh_penalty
         results.append(total_damage)
 
     return results
@@ -236,7 +261,7 @@ def cumulative_probability_at_least(damages: Sequence[int], thresholds: Iterable
 
 
 def tune_trial_count(
-    damage_sequence: Sequence[int],
+    damage_sequence: Sequence[int | DamageEvent],
     deck_config: DeckConfig,
     threshold: int,
     target_error: float = 0.01,
