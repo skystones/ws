@@ -114,6 +114,66 @@ class DeckState:
         return card, refresh_damage
 
 
+@dataclass(frozen=True)
+class MagicStoneResult:
+    deck_cards: int
+    deck_climax_cards: int
+    stock_cards: int
+    stock_climax_cards: int
+
+
+def apply_magic_stone_effect(
+    stock_cards: int,
+    stock_climax_cards: int,
+    deck_cards: int,
+    deck_climax_cards: int,
+    rng: random.Random | None = None,
+) -> MagicStoneResult:
+    """Mix stock into the deck and redraw stock to model the magic stone effect.
+
+    The function shuffles the combined stock and deck piles, then deals the same
+    number of stock cards back out. The returned :class:`MagicStoneResult`
+    captures the new climax composition of both piles after resolution.
+    """
+
+    for value, label in (
+        (stock_cards, "stock_cards"),
+        (stock_climax_cards, "stock_climax_cards"),
+        (deck_cards, "deck_cards"),
+        (deck_climax_cards, "deck_climax_cards"),
+    ):
+        if value < 0:
+            raise ValueError(f"{label} cannot be negative")
+
+    if stock_climax_cards > stock_cards:
+        raise ValueError("stock_climax_cards cannot exceed stock_cards")
+    if deck_climax_cards > deck_cards:
+        raise ValueError("deck_climax_cards cannot exceed deck_cards")
+
+    total_cards = stock_cards + deck_cards
+    if total_cards <= 0:
+        raise ValueError("stock_cards + deck_cards must be positive")
+    total_climax_cards = stock_climax_cards + deck_climax_cards
+    if total_climax_cards > total_cards:
+        raise ValueError("Total climax cards cannot exceed combined card count")
+
+    local_rng = rng or random.Random()
+    combined = [True] * total_climax_cards + [False] * (
+        total_cards - total_climax_cards
+    )
+    local_rng.shuffle(combined)
+
+    new_deck_climax_cards = sum(combined[:deck_cards])
+    new_stock_climax_cards = total_climax_cards - new_deck_climax_cards
+
+    return MagicStoneResult(
+        deck_cards=deck_cards,
+        deck_climax_cards=new_deck_climax_cards,
+        stock_cards=stock_cards,
+        stock_climax_cards=new_stock_climax_cards,
+    )
+
+
 class AttackingDeckState:
     def __init__(self, deck_size: int, soul_trigger_cards: int, rng: random.Random) -> None:
         self.deck_size = deck_size

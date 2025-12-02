@@ -7,6 +7,8 @@ from ws_sim.monte_carlo import (
     DamageEvent,
     DeckConfig,
     DeckState,
+    MagicStoneResult,
+    apply_magic_stone_effect,
     cumulative_probability_at_least,
     main_phase_four_damage_with_bonus,
     reveal_nine_clock_climaxes,
@@ -72,6 +74,31 @@ def test_refresh_preserves_composition_with_initial_waiting_room():
 def test_invalid_initial_waiting_room_configuration(kwargs):
     with pytest.raises(ValueError):
         DeckConfig(**kwargs)
+
+
+def test_magic_stone_shuffles_stock_back_into_deck():
+    rng = random.Random(7)
+
+    result = apply_magic_stone_effect(
+        stock_cards=5,
+        stock_climax_cards=2,
+        deck_cards=8,
+        deck_climax_cards=3,
+        rng=rng,
+    )
+
+    assert isinstance(result, MagicStoneResult)
+    assert result.deck_cards == 8
+    assert result.stock_cards == 5
+    assert result.deck_climax_cards == 2
+    assert result.stock_climax_cards + result.deck_climax_cards == 5
+
+
+def test_magic_stone_validates_counts():
+    with pytest.raises(ValueError):
+        apply_magic_stone_effect(1, 2, 5, 1)
+    with pytest.raises(ValueError):
+        apply_magic_stone_effect(0, 0, 0, 0)
 
 
 def test_reproducible_trials():
