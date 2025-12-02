@@ -10,7 +10,7 @@ from ws_sim.monte_carlo import (
     MagicStoneResult,
     apply_magic_stone_effect,
     cumulative_probability_at_least,
-    main_phase_four_damage_with_bonus,
+    main_phase_fourth_cancel_bonus_damage,
     reveal_nine_clock_climaxes,
     simulate_trials,
     tune_trial_count,
@@ -204,17 +204,31 @@ def test_attacking_deck_validation():
         )
 
 
-def test_main_phase_four_damage_with_bonus_uses_cancellation():
+def test_main_phase_fourth_cancel_bonus_damage_triggers_on_fourth_card():
     rng = random.Random(0)
     config = DeckConfig(total_cards=8, climax_cards=1)
     state = DeckState(config, rng)
     state.deck = [False, False, False, False, True, False, False, False]
     state.waiting_room = []
 
-    damage = main_phase_four_damage_with_bonus(state)
+    damage = main_phase_fourth_cancel_bonus_damage(state)
 
     assert damage == 4
     assert len(state.deck) == 0
+    assert sum(state.waiting_room) == 1
+
+
+def test_main_phase_fourth_cancel_bonus_damage_skips_early_cancels():
+    rng = random.Random(1)
+    config = DeckConfig(total_cards=8, climax_cards=1)
+    state = DeckState(config, rng)
+    state.deck = [False, False, False, False, False, False, True, False]
+    state.waiting_room = []
+
+    damage = main_phase_fourth_cancel_bonus_damage(state)
+
+    assert damage == 0
+    assert len(state.deck) == 4
     assert sum(state.waiting_room) == 1
 
 
@@ -241,11 +255,11 @@ def test_simulate_trials_runs_main_phase_steps_first():
         deck_config=config,
         trials=1,
         seed=seed,
-        main_phase_steps=[main_phase_four_damage_with_bonus],
+        main_phase_steps=[main_phase_fourth_cancel_bonus_damage],
     )
 
     rng = random.Random(seed)
     expected_state = DeckState(config, rng)
-    expected_main_phase_damage = main_phase_four_damage_with_bonus(expected_state)
+    expected_main_phase_damage = main_phase_fourth_cancel_bonus_damage(expected_state)
 
     assert damages == [expected_main_phase_damage]

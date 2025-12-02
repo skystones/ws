@@ -5,7 +5,12 @@ from ws_sim.main_phase import (
     run_main_phase_and_battle,
     seed_top_stack,
 )
-from ws_sim.monte_carlo import DamageEvent, DeckConfig, DeckState, main_phase_four_damage_with_bonus
+from ws_sim.monte_carlo import (
+    DamageEvent,
+    DeckConfig,
+    DeckState,
+    main_phase_fourth_cancel_bonus_damage,
+)
 
 
 def test_seed_top_stack_places_known_cards_on_top():
@@ -24,14 +29,14 @@ def test_seed_top_stack_places_known_cards_on_top():
 
 def test_seeded_stack_triggers_conditional_main_phase_damage():
     config = DeckConfig(total_cards=8, climax_cards=1)
-    top_stack = [True, False, False, False]
+    top_stack = [False, False, False, True]
 
     damages = run_main_phase_and_battle(
         damage_sequence=[],
         deck_config=config,
         main_phase_steps=[
             apply_seeded_top_stack(top_stack),
-            main_phase_four_damage_with_bonus,
+            main_phase_fourth_cancel_bonus_damage,
         ],
         trials=1,
         seed=9,
