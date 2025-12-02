@@ -59,6 +59,20 @@ def test_seed_top_stack_places_climax_on_fourth_damage_card():
     assert sum(state.waiting_room) == 1
 
 
+def test_fourth_cancel_triggers_followup_damage_with_seed_top_stack():
+    rng = random.Random(3)
+    config = DeckConfig(total_cards=8, climax_cards=1)
+    state = DeckState(config, rng)
+
+    seed_top_stack(state, [False, False, False, True, False, False, False, False])
+
+    damage = main_phase_fourth_cancel_bonus_damage(state)
+
+    assert damage == 4
+    assert len(state.deck) == 0
+    assert state.waiting_room[3] is True
+
+
 def test_seed_top_stack_early_cancel_blocks_bonus_damage():
     rng = random.Random(1)
     config = DeckConfig(total_cards=8, climax_cards=1)
