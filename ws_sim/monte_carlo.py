@@ -203,24 +203,29 @@ def _build_attacking_deck(
     )
 
 
-def _resolve_damage_event(damage: int, deck_state: DeckState) -> Tuple[int, int, bool]:
+def _resolve_damage_event(
+    damage: int, deck_state: DeckState
+) -> Tuple[int, int, bool, int | None]:
     """Resolve cancellable damage against the current ``deck_state``.
 
-    Returns a tuple of ``(damage_dealt, refresh_penalty, cancelled)`` where
-    ``refresh_penalty`` counts how many refresh penalty points were incurred while
-    resolving the damage event and ``cancelled`` indicates whether any point of
-    damage revealed a climax and cancelled the attack.
+    Returns a tuple of ``(damage_dealt, refresh_penalty, cancelled, cancel_position)``
+    where ``refresh_penalty`` counts how many refresh penalty points were incurred
+    while resolving the damage event, ``cancelled`` indicates whether any point of
+    damage revealed a climax and ``cancel_position`` records the 1-based index of
+    the first cancelling card (or ``None`` if no cancel occurred).
     """
 
     cancelled = False
+    cancel_position: int | None = None
     refresh_penalty = 0
-    for _ in range(damage):
+    for index in range(1, damage + 1):
         card, refreshed = deck_state.draw()
         if refreshed:
             refresh_penalty += 1
-        if card:
+        if card and not cancelled:
             cancelled = True
-    return (0 if cancelled else damage), refresh_penalty, cancelled
+            cancel_position = index
+    return (0 if cancelled else damage), refresh_penalty, cancelled, cancel_position
 
 
 def _resolve_attack_trigger(attacking_state: AttackingDeckState | None) -> bool:
@@ -233,7 +238,7 @@ def _simulate_attack(
     damage: int, deck_state: DeckState, attacking_state: AttackingDeckState | None
 ) -> Tuple[int, int]:
     damage_after_trigger = damage + 1 if _resolve_attack_trigger(attacking_state) else damage
-    dealt, refresh_penalty, _ = _resolve_damage_event(damage_after_trigger, deck_state)
+    dealt, refresh_penalty, _, _ = _resolve_damage_event(damage_after_trigger, deck_state)
     return dealt, refresh_penalty
 
 
@@ -284,7 +289,7 @@ def simulate_trials(
         ...     damage_sequence=[3, 3, 2],
         ...     deck_config=DeckConfig(total_cards=50, climax_cards=8),
         ...     trials=1000,
-        ...     main_phase_steps=[main_phase_four_damage_with_bonus],
+        ...     main_phase_steps=[main_phase_fourth_cancel_bonus_damage],
         ... )
     """
 
@@ -321,26 +326,32 @@ def simulate_trials(
                 )
                 total_damage += dealt + refresh_penalty
             else:
-                dealt, refresh_penalty, _ = _resolve_damage_event(event.base_damage, deck_state)
+                dealt, refresh_penalty, _, _ = _resolve_damage_event(
+                    event.base_damage, deck_state
+                )
                 total_damage += dealt + refresh_penalty
         results.append(total_damage)
 
     return results
 
 
-def main_phase_four_damage_with_bonus(deck_state: DeckState) -> int:
-    """Deal 4 cancellable damage and, on cancel, deal another cancellable 4.
+def main_phase_fourth_cancel_bonus_damage(deck_state: DeckState) -> int:
+    """Deal 4 cancellable damage and add 4 more only when the fourth card cancels.
 
     The helper returns the total damage dealt (including refresh penalties) so
     it can be used directly inside ``main_phase_steps``.
     """
 
-    dealt, refresh_penalty, cancelled = _resolve_damage_event(4, deck_state)
+    dealt, refresh_penalty, _, cancel_position = _resolve_damage_event(4, deck_state)
     total = dealt + refresh_penalty
-    if cancelled:
-        followup_dealt, followup_refresh, _ = _resolve_damage_event(4, deck_state)
+    if cancel_position == 4:
+        followup_dealt, followup_refresh, _, _ = _resolve_damage_event(4, deck_state)
         total += followup_dealt + followup_refresh
     return total
+
+
+# Backwards compatibility alias
+main_phase_four_damage_with_bonus = main_phase_fourth_cancel_bonus_damage
 
 
 def reveal_nine_clock_climaxes(deck_state: DeckState) -> int:
