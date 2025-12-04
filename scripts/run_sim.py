@@ -16,15 +16,28 @@ from ws_sim.plotting import plot_cumulative_histogram
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Weiss Schwarz damage Monte Carlo simulator")
     parser.add_argument("damages", nargs="+", type=int, help="Damage values for each attack (e.g. 2 3 3)")
-    parser.add_argument("--total-cards", type=int, default=50, help="Total number of cards in deck")
-    parser.add_argument("--climax-cards", type=int, default=8, help="Number of climax cards in deck")
+    parser.add_argument(
+        "--deck-cards",
+        "--total-cards",
+        dest="deck_cards",
+        type=int,
+        default=50,
+        help="Current number of cards in the deck (alias: --total-cards)",
+    )
+    parser.add_argument(
+        "--deck-climax-cards",
+        "--climax-cards",
+        dest="deck_climax_cards",
+        type=int,
+        default=8,
+        help="Number of climax cards currently in the deck (alias: --climax-cards)",
+    )
     parser.add_argument(
         "--waiting-room-cards",
         type=int,
         default=0,
         help=(
-            "Number of cards that start in the waiting room. These cards are removed from"
-            " the initial deck to model a partially milled deck or a post-refresh state."
+            "Number of cards that start in the waiting room (already milled or clocked) in addition to the deck."
         ),
     )
     parser.add_argument(
@@ -58,8 +71,8 @@ def main() -> None:
     args = parse_args()
 
     config = DeckConfig(
-        total_cards=args.total_cards,
-        climax_cards=args.climax_cards,
+        deck_cards=args.deck_cards,
+        deck_climax_cards=args.deck_climax_cards,
         waiting_room_cards=args.waiting_room_cards,
         waiting_room_climax_cards=args.waiting_room_climax_cards,
     )

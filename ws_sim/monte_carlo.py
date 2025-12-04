@@ -7,8 +7,15 @@ from typing import Callable, Iterable, List, Mapping, MutableSequence, Sequence,
 
 @dataclass(frozen=True)
 class DeckConfig:
-    total_cards: int
-    climax_cards: int
+    """Deck and waiting room composition at the start of a simulation.
+
+    ``deck_cards`` / ``deck_climax_cards`` describe the current deck only.
+    Waiting room counts (either ``initial_waiting_room_*`` or
+    ``waiting_room_*`` overrides) are added on top of the deck rather than
+    being subtracted from it, so they represent cards already milled/clocked.
+    """
+    deck_cards: int
+    deck_climax_cards: int
     initial_waiting_room_cards: int = 0
     initial_waiting_room_climax_cards: int = 0
     waiting_room_cards: int = 0
@@ -17,40 +24,23 @@ class DeckConfig:
     attacking_soul_trigger_cards: int = 0
 
     def __post_init__(self) -> None:
-        if self.climax_cards > self.total_cards:
-            raise ValueError("climax_cards cannot exceed total_cards")
-        if self.total_cards <= 0:
-            raise ValueError("total_cards must be positive")
-        if self.climax_cards < 0:
-            raise ValueError("climax_cards cannot be negative")
+        if self.deck_cards <= 0:
+            raise ValueError("deck_cards must be positive")
+        if self.deck_climax_cards < 0:
+            raise ValueError("deck_climax_cards cannot be negative")
+        if self.deck_climax_cards > self.deck_cards:
+            raise ValueError("deck_climax_cards cannot exceed deck_cards")
         if self.initial_waiting_room_cards < 0:
             raise ValueError("initial_waiting_room_cards cannot be negative")
         if self.initial_waiting_room_climax_cards < 0:
             raise ValueError("initial_waiting_room_climax_cards cannot be negative")
-        if self.initial_waiting_room_cards > self.total_cards:
-            raise ValueError("initial_waiting_room_cards cannot exceed total_cards")
         if self.initial_waiting_room_climax_cards > self.initial_waiting_room_cards:
             raise ValueError("initial_waiting_room_climax_cards cannot exceed initial_waiting_room_cards")
-        if self.initial_waiting_room_climax_cards > self.climax_cards:
-            raise ValueError("initial_waiting_room_climax_cards cannot exceed climax_cards")
 
-        remaining_cards = self.total_cards - self.initial_waiting_room_cards
-        remaining_climax_cards = self.climax_cards - self.initial_waiting_room_climax_cards
-        if remaining_climax_cards > remaining_cards:
-            raise ValueError("Remaining climax cards cannot exceed remaining deck size")
         if self.waiting_room_cards < 0:
             raise ValueError("waiting_room_cards cannot be negative")
         if self.waiting_room_climax_cards < 0:
             raise ValueError("waiting_room_climax_cards cannot be negative")
-        if self.waiting_room_cards > self.total_cards:
-            raise ValueError("waiting_room_cards cannot exceed total_cards")
-        if self.waiting_room_climax_cards > self.climax_cards:
-            raise ValueError("waiting_room_climax_cards cannot exceed climax_cards")
-
-        deck_size = self.total_cards - self.waiting_room_cards
-        deck_climax_cards = self.climax_cards - self.waiting_room_climax_cards
-        if deck_climax_cards > deck_size:
-            raise ValueError("climax_cards in deck cannot exceed remaining deck size")
         if self.waiting_room_climax_cards > self.waiting_room_cards:
             raise ValueError("waiting_room_climax_cards cannot exceed waiting_room_cards")
 
@@ -64,40 +54,50 @@ class DeckConfig:
             if self.attacking_soul_trigger_cards > self.attacking_deck_size:
                 raise ValueError("attacking_soul_trigger_cards cannot exceed attacking_deck_size")
 
+    @property
+    def starting_waiting_room(self) -> Tuple[int, int]:
+        """Return the waiting room composition to seed the simulation."""
+        if self.waiting_room_cards or self.waiting_room_climax_cards:
+            return self.waiting_room_cards, self.waiting_room_climax_cards
+        return self.initial_waiting_room_cards, self.initial_waiting_room_climax_cards
+
 
 class DeckState:
     def __init__(self, config: DeckConfig, rng: random.Random) -> None:
         self.config = config
         self.rng = rng
-        deck_size = config.total_cards - config.initial_waiting_room_cards
-        deck_climax_cards = config.climax_cards - config.initial_waiting_room_climax_cards
+        waiting_room_cards, waiting_room_climax_cards = config.starting_waiting_room
+        deck_size = config.deck_cards
+        deck_climax_cards = config.deck_climax_cards
 
         self.waiting_room: MutableSequence[bool] = self._build_shuffled_pile(
-            config.initial_waiting_room_cards, config.initial_waiting_room_climax_cards
+            waiting_room_cards, waiting_room_climax_cards
         )
-        self.deck: MutableSequence[bool] = self._build_shuffled_pile(
-            deck_size, deck_climax_cards
-        )
-        self._validate_state()
-
-        if config.waiting_room_cards or config.waiting_room_climax_cards:
-            deck_size = config.total_cards - config.waiting_room_cards
-            deck_climax_cards = config.climax_cards - config.waiting_room_climax_cards
-            self.deck = self._build_shuffled_pile(deck_size, deck_climax_cards)
-            self.waiting_room = self._build_shuffled_pile(
-                config.waiting_room_cards, config.waiting_room_climax_cards
-            )
+        self.deck: MutableSequence[bool] = self._build_shuffled_pile(deck_size, deck_climax_cards)
+        self.total_cards = deck_size + waiting_room_cards
+        self.total_climax_cards = deck_climax_cards + waiting_room_climax_cards
+        self._validate_state(deck_size, deck_climax_cards, waiting_room_cards, waiting_room_climax_cards)
 
     def _build_shuffled_pile(self, size: int, climax_cards: int) -> MutableSequence[bool]:
         pile = [True] * climax_cards + [False] * (size - climax_cards)
         self.rng.shuffle(pile)
         return pile
 
-    def _validate_state(self) -> None:
+    def _validate_state(
+        self,
+        expected_deck_cards: int,
+        expected_deck_climax_cards: int,
+        expected_waiting_cards: int,
+        expected_waiting_climax_cards: int,
+    ) -> None:
         total_cards = len(self.deck) + len(self.waiting_room)
         total_climax_cards = sum(self.deck) + sum(self.waiting_room)
-        if total_cards != self.config.total_cards or total_climax_cards != self.config.climax_cards:
+        if total_cards != self.total_cards or total_climax_cards != self.total_climax_cards:
             raise ValueError("Deck and waiting room composition does not match configuration")
+        if len(self.deck) != expected_deck_cards or sum(self.deck) != expected_deck_climax_cards:
+            raise ValueError("Deck composition does not match configuration")
+        if len(self.waiting_room) != expected_waiting_cards or sum(self.waiting_room) != expected_waiting_climax_cards:
+            raise ValueError("Waiting room composition does not match configuration")
 
     def draw(self) -> Tuple[bool, bool]:
         refresh_damage = False
@@ -107,7 +107,12 @@ class DeckState:
             self.waiting_room = []
             self.rng.shuffle(self.deck)
             refresh_damage = True
-            self._validate_state()
+            self._validate_state(
+                expected_deck_cards=len(self.deck),
+                expected_deck_climax_cards=sum(self.deck),
+                expected_waiting_cards=len(self.waiting_room),
+                expected_waiting_climax_cards=sum(self.waiting_room),
+            )
 
         card = self.deck.pop()
         self.waiting_room.append(card)
@@ -287,7 +292,7 @@ def simulate_trials(
     Example:
         >>> simulate_trials(
         ...     damage_sequence=[3, 3, 2],
-        ...     deck_config=DeckConfig(total_cards=50, climax_cards=8),
+        ...     deck_config=DeckConfig(deck_cards=50, deck_climax_cards=8),
         ...     trials=1000,
         ...     main_phase_steps=[main_phase_fourth_cancel_bonus_damage],
         ... )

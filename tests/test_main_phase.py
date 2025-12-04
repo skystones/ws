@@ -15,7 +15,7 @@ from ws_sim.monte_carlo import (
 
 def test_seed_top_stack_places_known_cards_on_top():
     rng = random.Random(0)
-    config = DeckConfig(total_cards=8, climax_cards=3)
+    config = DeckConfig(deck_cards=8, deck_climax_cards=3)
     state = DeckState(config, rng)
 
     top_stack = [True, False, True]
@@ -28,7 +28,7 @@ def test_seed_top_stack_places_known_cards_on_top():
 
 
 def test_seeded_stack_triggers_conditional_main_phase_damage():
-    config = DeckConfig(total_cards=8, climax_cards=1)
+    config = DeckConfig(deck_cards=8, deck_climax_cards=1)
     top_stack = [False, False, False, True]
 
     damages = run_main_phase_and_battle(
@@ -47,7 +47,7 @@ def test_seeded_stack_triggers_conditional_main_phase_damage():
 
 def test_seed_top_stack_places_climax_on_fourth_damage_card():
     rng = random.Random(0)
-    config = DeckConfig(total_cards=8, climax_cards=1)
+    config = DeckConfig(deck_cards=8, deck_climax_cards=1)
     state = DeckState(config, rng)
 
     seed_top_stack(state, [False, False, False, True])
@@ -61,7 +61,7 @@ def test_seed_top_stack_places_climax_on_fourth_damage_card():
 
 def test_fourth_cancel_triggers_followup_damage_with_seed_top_stack():
     rng = random.Random(3)
-    config = DeckConfig(total_cards=8, climax_cards=1)
+    config = DeckConfig(deck_cards=8, deck_climax_cards=1)
     state = DeckState(config, rng)
 
     seed_top_stack(state, [False, False, False, True, False, False, False, False])
@@ -75,7 +75,7 @@ def test_fourth_cancel_triggers_followup_damage_with_seed_top_stack():
 
 def test_seed_top_stack_early_cancel_blocks_bonus_damage():
     rng = random.Random(1)
-    config = DeckConfig(total_cards=8, climax_cards=1)
+    config = DeckConfig(deck_cards=8, deck_climax_cards=1)
     state = DeckState(config, rng)
 
     seed_top_stack(state, [False, True, False, False])
@@ -89,7 +89,7 @@ def test_seed_top_stack_early_cancel_blocks_bonus_damage():
 
 def test_seed_top_stack_no_cancel_resolves_only_base_damage():
     rng = random.Random(2)
-    config = DeckConfig(total_cards=8, climax_cards=1)
+    config = DeckConfig(deck_cards=8, deck_climax_cards=1)
     state = DeckState(config, rng)
 
     seed_top_stack(state, [False, False, False, False])
@@ -102,7 +102,7 @@ def test_seed_top_stack_no_cancel_resolves_only_base_damage():
 
 
 def test_seeded_stack_applies_before_battle_attacks():
-    config = DeckConfig(total_cards=3, climax_cards=1)
+    config = DeckConfig(deck_cards=3, deck_climax_cards=1)
     top_stack = [True]
 
     damages = run_main_phase_and_battle(

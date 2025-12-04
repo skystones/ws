@@ -3,7 +3,7 @@ This project provides a Monte Carlo simulator for Weiss Schwarz damage resolutio
 
 ## Features
 - 目的: ダメージ解決の挙動と確率分布を素早く把握する。
-- 前提/初期状態: デッキ枚数とクライマックス（ダメージを無効化するカード）構成を指定する。
+- 前提/初期状態: デッキ枚数とクライマックス（ダメージを無効化するカード）構成を指定する（`deck_cards`/`deck_climax_cards` は「いま山札にある」枚数を表し、控え室枚数はそこへ追加される）。
 - 試行内容: Monte Carlo でダメージシーケンスを繰り返し解き、山札再構築（refresh reshuffle）やリフレッシュペナルティ（再構築時に受ける1点ダメージ）を含めて計算する。
 - 確認する指標（例：P(>=6)）: 累積確率やダメージ閾値到達確率を集計する。
 - Simulate sequential damage packets against a deck with configurable climax density.
@@ -29,7 +29,7 @@ pip install -r requirements.txt
 - 確認する指標（例：P(>=6)）: 出力される確率や PNG の累積ヒストグラムで閾値到達度を確認する。
 ```bash
 python scripts/run_sim.py 2 3 3 \
-  --total-cards 50 --climax-cards 8 --trials 2000 \
+  --deck-cards 50 --deck-climax-cards 8 --trials 2000 \
   --waiting-room-cards 10 --waiting-room-climax-cards 2 \
   --threshold 6 --auto-tune --target-error 0.02 --png artifacts/hist.png
 ```
@@ -52,7 +52,7 @@ from ws_sim.monte_carlo import DeckConfig, simulate_trials, cumulative_probabili
 from ws_sim.plotting import plot_cumulative_histogram
 
 damage_sequence = [2, 3, 3]
-deck = DeckConfig(total_cards=50, climax_cards=8)
+deck = DeckConfig(deck_cards=50, deck_climax_cards=8)
 damages = simulate_trials(damage_sequence, deck, trials=5000, seed=1)
 probabilities = cumulative_probability_at_least(damages, range(0, max(damages) + 1))
 plot_cumulative_histogram(probabilities, save_path="artifacts/hist.png")
